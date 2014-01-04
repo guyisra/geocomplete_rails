@@ -1,4 +1,4 @@
-/*!
+/**
  * jQuery Geocoding and Places Autocomplete Plugin - V 1.4.1
  *
  * @author Martin Kleppe <kleppe@ubilabs.net>, 2012
@@ -6,8 +6,13 @@
  * @license MIT License <http://www.opensource.org/licenses/mit-license.php>
  */
 
+// # $.geocomplete()
+// ## jQuery Geocoding and Places Autocomplete Plugin - V 1.4.1
+//
+// * https://github.com/ubilabs/geocomplete/
+// * by Martin Kleppe <kleppe@ubilabs.net>
 
-;(function($, window, document, undefined){
+(function($, window, document, undefined){
 
   // ## Options
   // The default options for this plugin.
@@ -264,6 +269,32 @@
       this.geocoder.geocode(request, $.proxy(this.handleGeocode, this));
     },
 
+    // Get the selected result. If no result is selected on the list, then get
+    // the first result from the list.
+    selectFirstResult: function() {
+      //$(".pac-container").hide();
+
+      var selected = '';
+      // Check if any result is selected.
+      if ($(".pac-item-selected")['0']) {
+        selected = '-selected';
+      }
+
+      // Get the first suggestion's text.
+      var $span1 = $(".pac-container .pac-item" + selected + ":first span:nth-child(2)").text();
+      var $span2 = $(".pac-container .pac-item" + selected + ":first span:nth-child(3)").text();
+
+      // Adds the additional information, if available.
+      var firstResult = $span1;
+      if ($span2) {
+        firstResult += " - " + $span2;
+      }
+
+      this.$input.val(firstResult);
+
+      return firstResult;
+    },
+
     // Handles the geocode response. If more than one results was found
     // it triggers the "geocode:multiple" events. If there was an error
     // the "geocode:error" event is fired.
@@ -405,8 +436,12 @@
       var place = this.autocomplete.getPlace();
 
       if (!place.geometry){
-        this.find(place.name);
+        // Automatically selects the highlighted item or the first item from the
+        // suggestions list.
+        var autoSelection = this.selectFirstResult();
+        this.find(autoSelection);
       } else {
+        // Use the input text if it already gives geometry.
         this.update(place);
       }
     }
