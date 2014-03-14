@@ -1,5 +1,5 @@
 /**
- * jQuery Geocoding and Places Autocomplete Plugin - V 1.4.1
+ * jQuery Geocoding and Places Autocomplete Plugin - V 1.5.0
  *
  * @author Martin Kleppe <kleppe@ubilabs.net>, 2012
  * @author Ubilabs http://ubilabs.net, 2012
@@ -7,7 +7,7 @@
  */
 
 // # $.geocomplete()
-// ## jQuery Geocoding and Places Autocomplete Plugin - V 1.4.1
+// ## jQuery Geocoding and Places Autocomplete Plugin - V 1.5.0
 //
 // * https://github.com/ubilabs/geocomplete/
 // * by Martin Kleppe <kleppe@ubilabs.net>
@@ -21,6 +21,7 @@
   // * `details` - The container that should be populated with data. Defaults to `false` which ignores the setting.
   // * `location` - Location to initialize the map on. Might be an address `string` or an `array` with [latitude, longitude] or a `google.maps.LatLng`object. Default is `false` which shows a blank map.
   // * `bounds` - Whether to snap geocode search to map bounds. Default: `true` if false search globally. Alternatively pass a custom `LatLngBounds object.
+  // * `autoselect` - Automatically selects the highlighted item or the first item from the suggestions list on Enter.
   // * `detailsAttribute` - The attribute's name to use as an indicator. Default: `"name"`
   // * `mapOptions` - Options to pass to the `google.maps.Map` constructor. See the full list [here](http://code.google.com/apis/maps/documentation/javascript/reference.html#MapOptions).
   // * `mapOptions.zoom` - The inital zoom level. Default: `14`
@@ -38,6 +39,7 @@
     map: false,
     details: false,
     detailsAttribute: "name",
+    autoselect: true,
     location: false,
 
     mapOptions: {
@@ -115,6 +117,12 @@
         this.map,
         'click',
         $.proxy(this.mapClicked, this)
+      );
+
+      google.maps.event.addListener(
+        this.map,
+        'zoom_changed',
+        $.proxy(this.mapZoomed, this)
       );
     },
 
@@ -423,6 +431,10 @@
         this.trigger("geocode:click", event.latLng);
     },
 
+    mapZoomed: function(event) {
+      this.trigger("geocode:zoom", this.map.getZoom());
+    },
+
     // Restore the old position of the marker to the last now location.
     resetMarker: function(){
       this.marker.setPosition(this.data.location);
@@ -436,10 +448,12 @@
       var place = this.autocomplete.getPlace();
 
       if (!place.geometry){
-        // Automatically selects the highlighted item or the first item from the
-        // suggestions list.
-        var autoSelection = this.selectFirstResult();
-        this.find(autoSelection);
+        if (this.options.autoselect) {
+          // Automatically selects the highlighted item or the first item from the
+          // suggestions list.
+          var autoSelection = this.selectFirstResult();
+          this.find(autoSelection);
+        }
       } else {
         // Use the input text if it already gives geometry.
         this.update(place);
