@@ -6,7 +6,7 @@ require 'geocomplete_rails/version'
 Gem::Specification.new do |spec|
   spec.name          = "geocomplete_rails"
   spec.version       = GeocompleteRails::VERSION
-  spec.authors       = ["Guy Israeli"]
+  spec.authors       = ["Guy Israeli", "Justin Reese"]
   spec.description   = %q{Wrapper for geocomplete.js - a jQuery Geocoding and Places Autocomplete Plugin}
   spec.summary       = %q{jQuery Geocoding and Places Autocomplete Plugin}
   spec.homepage      = "https://github.com/guyisra/geocomplete_rails"
