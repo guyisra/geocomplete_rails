@@ -1,5 +1,5 @@
 /**
- * jQuery Geocoding and Places Autocomplete Plugin - V 1.6.4
+ * jQuery Geocoding and Places Autocomplete Plugin - V 1.6.5
  *
  * @author Martin Kleppe <kleppe@ubilabs.net>, 2014
  * @author Ubilabs http://ubilabs.net, 2014
@@ -19,6 +19,7 @@
   //
   // * `map` - Might be a selector, an jQuery object or a DOM element. Default is `false` which shows no map.
   // * `details` - The container that should be populated with data. Defaults to `false` which ignores the setting.
+  // * 'detailsScope' - Allows you to scope the 'details' container and have multiple geocomplete fields on one page. Must be a parent of the input. Default is 'null'
   // * `location` - Location to initialize the map on. Might be an address `string` or an `array` with [latitude, longitude] or a `google.maps.LatLng`object. Default is `false` which shows a blank map.
   // * `bounds` - Whether to snap geocode search to map bounds. Default: `true` if false search globally. Alternatively pass a custom `LatLngBounds object.
   // * `autoselect` - Automatically selects the highlighted item or the first item from the suggestions list on Enter.
@@ -34,6 +35,7 @@
   // * `types` - An array containing one or more of the supported types for the places request. Default: `['geocode']` See the full list [here](http://code.google.com/apis/maps/documentation/javascript/places.html#place_search_requests).
   // * `blur` - Trigger geocode when input loses focus.
   // * `geocodeAfterResult` - If blur is set to true, choose whether to geocode if user has explicitly selected a result before blur.
+  // * `restoreValueAfterBlur` - Restores the input's value upon blurring. Default is `false` which ignores the setting.
 
   var defaults = {
     bounds: true,
@@ -41,6 +43,7 @@
     map: false,
     details: false,
     detailsAttribute: "name",
+    detailsScope: null,
     autoselect: true,
     location: false,
 
@@ -57,7 +60,8 @@
     maxZoom: 16,
     types: ['geocode'],
     blur: false,
-    geocodeAfterResult: false
+    geocodeAfterResult: false,
+    restoreValueAfterBlur: false
   };
 
   // See: [Geocoding Types](https://developers.google.com/maps/documentation/geocoding/#Types)
@@ -122,6 +126,20 @@
         $.proxy(this.mapClicked, this)
       );
 
+      // add dragend even listener on the map
+      google.maps.event.addListener(
+        this.map,
+        'dragend',
+        $.proxy(this.mapDragged, this)
+      );
+
+      // add idle even listener on the map
+      google.maps.event.addListener(
+        this.map,
+        'idle',
+        $.proxy(this.mapIdle, this)
+      );
+
       google.maps.event.addListener(
         this.map,
         'zoom_changed',
@@ -184,14 +202,14 @@
       );
 
       // Prevent parent form from being submitted if user hit enter.
-      this.$input.keypress(function(event){
+      this.$input.on('keypress.' + this._name, function(event){
         if (event.keyCode === 13){ return false; }
       });
 
       // Assume that if user types anything after having selected a result,
       // the selected location is not valid any more.
       if (this.options.geocodeAfterResult === true){
-        this.$input.bind('keypress', $.proxy(function(){
+        this.$input.bind('keypress.' + this._name, $.proxy(function(){
           if (event.keyCode != 9 && this.selected === true){
               this.selected = false;
           }
@@ -199,8 +217,13 @@
       }
 
       // Listen for "geocode" events and trigger find action.
-      this.$input.bind("geocode", $.proxy(function(){
+      this.$input.bind('geocode.' + this._name, $.proxy(function(){
         this.find();
+      }, this));
+
+      // Saves the previous input value
+      this.$input.bind('geocode:result.' + this._name, $.proxy(function(){
+        this.lastInputVal = this.$input.val();
       }, this));
 
       // Trigger find action when input element is blurred out and user has
@@ -208,9 +231,14 @@
       // (Useful for typing partial location and tabbing to the next field
       // or clicking somewhere else.)
       if (this.options.blur === true){
-        this.$input.blur($.proxy(function(){
-          if (this.options.geocodeAfterResult === true && this.selected === true){ return; }
-          this.find();
+        this.$input.on('blur.' + this._name, $.proxy(function(){
+          if (this.options.geocodeAfterResult === true && this.selected === true) { return; }
+
+          if (this.options.restoreValueAfterBlur === true && this.selected === true) {
+            setTimeout($.proxy(this.restoreLastValue, this), 0);
+          } else {
+            this.find();
+          }
         }, this));
       }
     },
@@ -221,8 +249,13 @@
     initDetails: function(){
       if (!this.options.details){ return; }
 
-      var $details = $(this.options.details),
-        attribute = this.options.detailsAttribute,
+      if(this.options.detailsScope) {
+        var $details = $(this.input).parents(this.options.detailsScope).find(this.options.details);
+      } else {
+        var $details = $(this.options.details);
+      }
+
+      var attribute = this.options.detailsAttribute,
         details = {};
 
       function setDetail(value){
@@ -269,6 +302,20 @@
       }
     },
 
+    destroy: function(){
+      if (this.map) {
+        google.maps.event.clearInstanceListeners(this.map);
+        google.maps.event.clearInstanceListeners(this.marker);
+      }
+
+      this.autocomplete.unbindAll();
+      google.maps.event.clearInstanceListeners(this.autocomplete);
+      google.maps.event.clearInstanceListeners(this.input);
+      this.$input.removeData();
+      this.$input.off(this._name);
+      this.$input.unbind('.' + this._name);
+    },
+
     // Look up a given address. If no `address` was specified it uses
     // the current value of the input.
     find: function(address){
@@ -280,6 +327,10 @@
     // Requests details about a given location.
     // Additionally it will bias the requests to the provided bounds.
     geocode: function(request){
+      // Don't geocode if the requested address is empty
+      if (!request.address) {
+        return;
+      }
       if (this.options.bounds && !request.bounds){
         if (this.options.bounds === true){
           request.bounds = this.map && this.map.getBounds();
@@ -319,6 +370,11 @@
       this.$input.val(firstResult);
 
       return firstResult;
+    },
+
+    // Restores the input value using the previous value if it exists
+    restoreLastValue: function() {
+      if (this.lastInputVal){ this.$input.val(this.lastInputVal); }
     },
 
     // Handles the geocode response. If more than one results was found
@@ -451,11 +507,21 @@
         this.trigger("geocode:click", event.latLng);
     },
 
+    // Fire the "geocode:mapdragged" event and pass the current position of the map center.
+    mapDragged: function(event) {
+      this.trigger("geocode:mapdragged", this.map.getCenter());
+    },
+
+    // Fire the "geocode:idle" event and pass the current position of the map center.
+    mapIdle: function(event) {
+      this.trigger("geocode:idle", this.map.getCenter());
+    },
+
     mapZoomed: function(event) {
       this.trigger("geocode:zoom", this.map.getZoom());
     },
 
-    // Restore the old position of the marker to the last now location.
+    // Restore the old position of the marker to the last knwon location.
     resetMarker: function(){
       this.marker.setPosition(this.data.location);
       this.setDetail(this.details.lat, this.data.location.lat());
